@@ -1,28 +1,26 @@
-name: Flutter Windows Release
+name: Flutter Windows Build
 on:
   push:
-    branches: [ main ] # Jab bhi aap push karenge build shuru hogi
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4 # Updated version
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          flutter-version: '3.22.0' # Fixes version issues
 
-      - name: Install Dependencies
+      - name: Get Dependencies
         run: flutter pub get
 
-      - name: Enable Windows Desktop
-        run: flutter config --enable-windows-desktop
-
-      - name: Build Windows
+      - name: Build Windows Release
         run: flutter build windows --release
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4 # Updated version
         with:
-          name: video-downloader-app
+          name: Video-Downloader-Windows-App
           path: build/windows/x64/runner/Release/
