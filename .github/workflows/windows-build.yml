@@ -8,11 +8,12 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
-          # Version ko specify karne ki bajaye 'any' ya bilkul latest rakhein
-          flutter-version: '3.29.0'
+          channel: 'stable' # Yeh hamesha latest stable version uthayega
+          cache: true # Build speed badhane ke liye
 
       - name: Get Dependencies
         run: flutter pub get
