@@ -1,12 +1,18 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 
-void main() => runApp(MaterialApp(home: WindowsDownloader()));
+void main() => runApp(MaterialApp(
+  debugShowCheckedModeBanner: false,
+  theme: ThemeData(primarySwatch: Colors.red),
+  home: WindowsDownloader(),
+));
 
 class WindowsDownloader extends StatefulWidget {
+  // Key error fix karne ke liye constructor update kiya
+  const WindowsDownloader({super.key});
+
   @override
   _WindowsDownloaderState createState() => _WindowsDownloaderState();
 }
@@ -15,25 +21,35 @@ class _WindowsDownloaderState extends State<WindowsDownloader> {
   final TextEditingController _urlController = TextEditingController();
   bool _isDownloading = false;
   double _progress = 0;
+
+  // Type MuxedStreamInfo rakhein kyunki humein quality labels chahiye
   List<MuxedStreamInfo> _availableQualities = [];
   MuxedStreamInfo? _selectedQuality;
   String _videoTitle = "";
 
-  // 1. Video ki Qualities Fetch Karna
+  // 1. Video ki Qualities Fetch karna
   Future<void> fetchVideoInfo(String url) async {
+    if (url.isEmpty) return;
+
     var yt = YoutubeExplode();
     try {
       var video = await yt.videos.get(url);
       var manifest = await yt.videos.streamsClient.getManifest(url);
 
+      // FIX for Line 38: manifest.muxed directly use karein
+      var allMuxedStreams = manifest.muxed
+          .where((s) => s.container.name == 'mp4')
+          .toList();
+
       setState(() {
         _videoTitle = video.title;
-        // 720p tak ki saari muxed streams nikalna
-        _availableQualities = manifest.muxed.toList();
-        _selectedQuality = _availableQualities.first;
+        _availableQualities = allMuxedStreams;
+        if (_availableQualities.isNotEmpty) {
+          _selectedQuality = _availableQualities.first;
+        }
       });
     } catch (e) {
-      print("Error fetching info: $e");
+      _showError("Video info fetch karne mein error: $e");
     } finally {
       yt.close();
     }
@@ -43,12 +59,11 @@ class _WindowsDownloaderState extends State<WindowsDownloader> {
   Future<void> downloadVideo() async {
     if (_selectedQuality == null) return;
 
-    // 1. Pehle Folder select karwayein (Windows ke liye ye best hai)
     String? selectedDirectory = await FilePicker.platform.getDirectoryPath(
-      dialogTitle: 'Select Folder to Save Video',
+      dialogTitle: 'Video kahan save karni hai?',
     );
 
-    if (selectedDirectory == null) return; // Agar user ne cancel kar diya
+    if (selectedDirectory == null) return;
 
     setState(() {
       _isDownloading = true;
@@ -57,18 +72,16 @@ class _WindowsDownloaderState extends State<WindowsDownloader> {
 
     var yt = YoutubeExplode();
     try {
-      // 2. File ka poora naam aur rasta banayein
       String cleanTitle = _videoTitle.replaceAll(RegExp(r'[^\w\s]+'), '');
-      String fullPath = "$selectedDirectory\\$cleanTitle.mp4"; // Windows uses backslash \
+      String fullPath = "$selectedDirectory\\$cleanTitle.mp4";
 
       var stream = yt.videos.streamsClient.get(_selectedQuality!);
       var file = File(fullPath);
       var fileStream = file.openWrite();
 
-      num totalSize = _selectedQuality!.size.totalBytes;
-      num downloaded = 0;
+      var totalSize = _selectedQuality!.size.totalBytes;
+      var downloaded = 0;
 
-      // 3. Data likhna shuru karein
       await for (var data in stream) {
         downloaded += data.length;
         setState(() {
@@ -80,55 +93,89 @@ class _WindowsDownloaderState extends State<WindowsDownloader> {
       await fileStream.flush();
       await fileStream.close();
 
-      showDialog(
-          context: context,
-          builder: (_) => AlertDialog(content: Text("Success! Video saved at: $fullPath"))
-      );
+      _showSuccess("Success! Video saved: $fullPath");
     } catch (e) {
-      print("Download Error: $e");
+      _showError("Download fail: $e");
     } finally {
       yt.close();
       setState(() { _isDownloading = false; });
     }
   }
 
+  void _showError(String msg) {
+    showDialog(context: context, builder: (_) => AlertDialog(title: Text("Error"), content: Text(msg)));
+  }
+
+  void _showSuccess(String msg) {
+    showDialog(context: context, builder: (_) => AlertDialog(title: Text("Success"), content: Text(msg)));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Windows YouTube Downloader")),
+      appBar: AppBar(title: Text("Advanced YouTube Downloader")),
       body: Padding(
         padding: EdgeInsets.all(30),
-        child: Column(
-          children: [
-            TextField(
-              controller: _urlController,
-              decoration: InputDecoration(
-                hintText: "Paste Link Here",
-                suffixIcon: IconButton(
-                  icon: Icon(Icons.search),
-                  onPressed: () => fetchVideoInfo(_urlController.text),
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              TextField(
+                controller: _urlController,
+                decoration: InputDecoration(
+                  labelText: "YouTube Link Paste Karein",
+                  border: OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    icon: Icon(Icons.search),
+                    onPressed: () => fetchVideoInfo(_urlController.text),
+                  ),
                 ),
               ),
-            ),
-            if (_videoTitle.isNotEmpty) ...[
-              SizedBox(height: 20),
-              Text("Video: $_videoTitle", style: TextStyle(fontWeight: FontWeight.bold)),
-              DropdownButton<MuxedStreamInfo>(
-                value: _selectedQuality,
-                items: _availableQualities.map((q) {
-                  return DropdownMenuItem(
-                    value: q,
-                    child: Text("${q.videoQualityLabel} (${(q.size.totalMegaBytes).toStringAsFixed(1)} MB)"),
-                  );
-                }).toList(),
-                onChanged: (val) => setState(() => _selectedQuality = val),
-              ),
-              SizedBox(height: 20),
-              _isDownloading
-                  ? LinearProgressIndicator(value: _progress)
-                  : ElevatedButton(onPressed: downloadVideo, child: Text("Download Now")),
-            ]
-          ],
+              if (_videoTitle.isNotEmpty) ...[
+                SizedBox(height: 30),
+                Card(
+                  elevation: 5,
+                  child: Padding(
+                    padding: EdgeInsets.all(15),
+                    child: Column(
+                      children: [
+                        Text(_videoTitle, textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        SizedBox(height: 15),
+
+                        // FIX for Line 151: List type matching
+                        DropdownButton<MuxedStreamInfo>(
+                          isExpanded: true,
+                          value: _selectedQuality,
+                          items: _availableQualities.map((stream) {
+                            return DropdownMenuItem<MuxedStreamInfo>(
+                              value: stream,
+                              child: Text("${stream.videoQualityLabel} (${(stream.size.totalMegaBytes).toStringAsFixed(1)} MB)"),
+                            );
+                          }).toList(),
+                          onChanged: (val) => setState(() => _selectedQuality = val),
+                        ),
+
+                        SizedBox(height: 20),
+                        _isDownloading
+                            ? Column(
+                          children: [
+                            LinearProgressIndicator(value: _progress, minHeight: 10),
+                            SizedBox(height: 10),
+                            Text("${(_progress * 100).toStringAsFixed(0)}% Downloaded"),
+                          ],
+                        )
+                            : ElevatedButton.icon(
+                          icon: Icon(Icons.download),
+                          label: Text("Download Now"),
+                          style: ElevatedButton.styleFrom(minimumSize: Size(double.infinity, 50)),
+                          onPressed: downloadVideo,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ]
+            ],
+          ),
         ),
       ),
     );
