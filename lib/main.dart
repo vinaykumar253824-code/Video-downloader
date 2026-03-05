@@ -11,7 +11,7 @@ void main() => runApp(MaterialApp(
 
 class WindowsDownloader extends StatefulWidget {
   // Key error fix karne ke liye constructor update kiya
-  const WindowsDownloader({super.key});
+  WindowsDownloader({super.key});
 
   @override
   _WindowsDownloaderState createState() => _WindowsDownloaderState();
