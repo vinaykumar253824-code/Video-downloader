@@ -28,6 +28,7 @@ class _WindowsDownloaderState extends State<WindowsDownloader> {
   String _videoTitle = "";
 
   // 1. Video ki Qualities Fetch karna
+// main.dart mein fetchVideoInfo function ko isse replace karein
   Future<void> fetchVideoInfo(String url) async {
     if (url.isEmpty) return;
 
@@ -36,20 +37,26 @@ class _WindowsDownloaderState extends State<WindowsDownloader> {
       var video = await yt.videos.get(url);
       var manifest = await yt.videos.streamsClient.getManifest(url);
 
-      // FIX for Line 38: manifest.muxed directly use karein
-      var allMuxedStreams = manifest.muxed
-          .where((s) => s.container.name == 'mp4')
-          .toList();
+      // FIX: Saari qualities fetch karne ke liye hum muxed streams ko filter karenge
+      // Taki audio + video dono saath milein 720p tak
+      var allMuxedStreams = manifest.muxed.where((s) => s.container.name == 'mp4').toList();
 
       setState(() {
         _videoTitle = video.title;
         _availableQualities = allMuxedStreams;
         if (_availableQualities.isNotEmpty) {
+          // Sabse high quality (pehle 720p) select karne ke liye:
+          _availableQualities.sort((a, b) => b.size.totalBytes.compareTo(a.size.totalBytes));
           _selectedQuality = _availableQualities.first;
         }
       });
     } catch (e) {
-      _showError("Video info fetch karne mein error: $e");
+      // Agar "Bot" wala error aaye toh user ko clear message dikhayein
+      if (e.toString().contains("Sign in")) {
+        _showError("YouTube ne temporary block kiya hai. Kuch der baad try karein ya doosra link use karein.");
+      } else {
+        _showError("Error: $e");
+      }
     } finally {
       yt.close();
     }
